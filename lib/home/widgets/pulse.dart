@@ -43,7 +43,10 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    if (_play) {}
+    if (_play) {
+      print(_gyroscopeValues);
+      print(_userAccelerometerValues);
+    }
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
