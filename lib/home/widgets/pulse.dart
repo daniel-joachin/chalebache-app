@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:sensors/sensors.dart';
+import 'dart:core';
+
+import 'package:http/http.dart' as http;
 
 class Pulse extends StatefulWidget {
   @override
@@ -16,6 +20,10 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
   List<double> _gyroscopeValues;
   List<StreamSubscription<dynamic>> _streamSubscriptions =
       <StreamSubscription<dynamic>>[];
+  List accelerometer = [];
+  List gyro = [];
+  Stopwatch timer = Stopwatch();
+  bool isPothole = true;
 
   @override
   void initState() {
@@ -44,10 +52,17 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     if (_play) {
-      print(_gyroscopeValues);
-      print(_userAccelerometerValues);
+      gyro.add({
+        'time': timer.elapsedMilliseconds / 1000,
+        'data': _gyroscopeValues,
+        'pothole': isPothole
+      });
+      accelerometer.add({
+        'time': timer.elapsedMilliseconds / 1000,
+        'data': _userAccelerometerValues,
+        'pothole': isPothole
+      });
     }
-
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -60,6 +75,13 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
               } else {
                 _play = !_play;
                 _animationController.repeat(reverse: true);
+              }
+
+              if (timer.isRunning) {
+                timer.stop();
+                timer.reset();
+              } else {
+                timer.start();
               }
             },
             customBorder: CircleBorder(),
@@ -79,7 +101,37 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
             ),
           ),
         ),
+        Padding(padding: EdgeInsets.only(top: 50)),
+        Text('¿Es Bache?'),
+        Switch(
+          value: isPothole,
+          onChanged: (value) {
+            setState(() {
+              isPothole = value;
+            });
+          },
+          activeColor: Colors.green,
+          activeTrackColor: Colors.grey,
+        ),
+        ElevatedButton(
+            onPressed: () async {
+              await sendData();
+            },
+            child: Text('Send Data'))
       ],
+    );
+  }
+
+  Future<http.Response> sendData() {
+    return http.post(
+      Uri.http('192.168.0.124:3030', '/api/potholes/batch'),
+      headers: <String, String>{
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: jsonEncode(<String, List<dynamic>>{
+        'gyroscope': gyro,
+        'accelerometer': accelerometer
+      }),
     );
   }
 }
