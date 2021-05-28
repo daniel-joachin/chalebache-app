@@ -124,7 +124,7 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
 
   Future<http.Response> sendData() {
     return http.post(
-      Uri.http('192.168.0.124:3030', '/api/potholes/batch'),
+      Uri.https('chalebache.herokuapp.com', '/api/potholes/batch'),
       headers: <String, String>{
         'Content-Type': 'application/json; charset=UTF-8',
       },
