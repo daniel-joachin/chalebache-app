@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:sensors/sensors.dart';
 import 'dart:core';
 
 import 'package:http/http.dart' as http;
+import 'package:sensors/sensors.dart';
+import 'package:location/location.dart';
 
 class Pulse extends StatefulWidget {
   @override
@@ -17,16 +18,20 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
   Animation _animation;
   bool _play = false;
   List<double> _userAccelerometerValues;
-  List<double> _gyroscopeValues;
   List<StreamSubscription<dynamic>> _streamSubscriptions =
       <StreamSubscription<dynamic>>[];
+
   List accelerometer = [];
-  List gyro = [];
+  double _latValues;
+  double _longValues;
   Stopwatch timer = Stopwatch();
-  bool isPothole = true;
+  Location location = new Location();
+  bool _serviceEnabled;
+  PermissionStatus _permissionGranted;
 
   @override
   void initState() {
+    super.initState();
     _animationController = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 1000),
@@ -35,48 +40,51 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
       ..addListener(() {
         setState(() {});
       });
-    super.initState();
-    _streamSubscriptions.add(gyroscopeEvents.listen((GyroscopeEvent event) {
-      setState(() {
-        _gyroscopeValues = <double>[event.x, event.y, event.z];
-      });
-    }));
     _streamSubscriptions
         .add(userAccelerometerEvents.listen((UserAccelerometerEvent event) {
       setState(() {
         _userAccelerometerValues = <double>[event.x, event.y, event.z];
       });
     }));
+    location.onLocationChanged.listen((LocationData currentLocation) {
+      setState(() {
+        _latValues = currentLocation.latitude;
+        _longValues = currentLocation.longitude;
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_play) {
-      gyro.add({
-        'time': timer.elapsedMilliseconds / 1000,
-        'data': _gyroscopeValues,
-        'pothole': isPothole
-      });
       accelerometer.add({
         'time': timer.elapsedMilliseconds / 1000,
         'data': _userAccelerometerValues,
-        'pothole': isPothole
+        'location': {'lat': _latValues, 'long': _longValues}
       });
+      if (((timer.elapsedMilliseconds ~/ 1000) + 1) % 7 == 0) {
+        sendData();
+        this.accelerometer.clear();
+        timer.reset();
+      }
     }
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Center(
           child: InkWell(
-            onTap: () {
-              if (_play) {
-                _play = !_play;
-                _animationController.reset();
-              } else {
-                _play = !_play;
-                _animationController.repeat(reverse: true);
+            onTap: () async {
+              bool service = await checkService();
+              bool permission = await checkPermissions();
+              if (!permission && !service) {
+                return;
               }
-
+              _play = !_play;
+              if (_play) {
+                _animationController.repeat(reverse: true);
+              } else {
+                _animationController.reset();
+              }
               if (timer.isRunning) {
                 timer.stop();
                 timer.reset();
@@ -89,49 +97,56 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
               width: 200,
               height: 200,
               decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.indigo,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.indigo,
-                      blurRadius: _animation.value,
-                      spreadRadius: _animation.value,
-                    )
-                  ]),
+                shape: BoxShape.circle,
+                color: Colors.indigo,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.indigo,
+                    blurRadius: _animation.value,
+                    spreadRadius: _animation.value,
+                  )
+                ],
+              ),
             ),
           ),
         ),
-        Padding(padding: EdgeInsets.only(top: 50)),
-        Text('¿Es Bache?'),
-        Switch(
-          value: isPothole,
-          onChanged: (value) {
-            setState(() {
-              isPothole = value;
-            });
-          },
-          activeColor: Colors.green,
-          activeTrackColor: Colors.grey,
-        ),
-        ElevatedButton(
-            onPressed: () async {
-              await sendData();
-            },
-            child: Text('Send Data'))
       ],
     );
   }
 
-  Future<http.Response> sendData() {
+  Future<http.Response> sendData() async {
     return http.post(
-      Uri.http('192.168.0.124:3030', '/api/potholes/batch'),
+      Uri.http('192.168.0.124:1440', '/api/pothole/'),
       headers: <String, String>{
         'Content-Type': 'application/json; charset=UTF-8',
       },
-      body: jsonEncode(<String, List<dynamic>>{
-        'gyroscope': gyro,
-        'accelerometer': accelerometer
-      }),
+      body: jsonEncode(
+        <String, List<dynamic>>{'accelerometer': accelerometer},
+      ),
     );
+  }
+
+  Future<bool> checkService() async {
+    _serviceEnabled = await location.serviceEnabled();
+    if (!_serviceEnabled) {
+      _serviceEnabled = await location.requestService();
+      if (!_serviceEnabled) {
+        return false;
+      }
+      return true;
+    }
+    return true;
+  }
+
+  Future<bool> checkPermissions() async {
+    _permissionGranted = await location.hasPermission();
+    if (_permissionGranted == PermissionStatus.denied) {
+      _permissionGranted = await location.requestPermission();
+      if (_permissionGranted != PermissionStatus.granted) {
+        return false;
+      }
+      return true;
+    }
+    return true;
   }
 }
