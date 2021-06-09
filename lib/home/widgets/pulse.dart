@@ -63,6 +63,7 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
         'location': {'lat': _latValues, 'long': _longValues}
       });
       if (((timer.elapsedMilliseconds ~/ 1000) + 1) % 7 == 0) {
+        print("Sending");
         sendData();
         this.accelerometer.clear();
         timer.reset();
@@ -116,7 +117,7 @@ class _PulseState extends State<Pulse> with TickerProviderStateMixin {
 
   Future<http.Response> sendData() async {
     return http.post(
-      Uri.http('192.168.0.124:1440', '/api/pothole/'),
+      Uri.http('129.146.169.60:1440', '/api/pothole/'),
       headers: <String, String>{
         'Content-Type': 'application/json; charset=UTF-8',
       },
